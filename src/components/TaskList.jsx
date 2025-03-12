@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
-  Paper, 
-  Button, 
-  CircularProgress,
+  Grid,
+  Card,
+  CardContent,
+  CardActions,
   Typography,
-  Box
+  Button,
+  Chip,
+  CircularProgress,
+  Box,
+  Paper
 } from '@mui/material';
+import { format, parseISO } from 'date-fns';
 import api from '../services/api';
 
 const TaskList = () => {
@@ -77,78 +77,75 @@ const TaskList = () => {
         </Button>
       </Box>
 
-      <TableContainer component={Paper} elevation={3}>
-        <Table sx={{ minWidth: 650 }} aria-label="lista de tarefas">
-          <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 'bold' }}>Título</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Descrição</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Data Limite</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }} align="center">Ações</TableCell>
-            </TableRow>
-          </TableHead>
-          
-          <TableBody>
-            {tasks?.length > 0 ? (
-              tasks.map((task) => (
-                <TableRow 
-                  key={task.id}
-                  sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-                >
-                  <TableCell>{task.title}</TableCell>
-                  <TableCell sx={{ maxWidth: '300px' }}>
-                    {task.description || 'Sem descrição'}
-                  </TableCell>
-                  <TableCell>
-                    {new Date(task.due_date).toLocaleDateString('pt-BR', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </TableCell>
-                  <TableCell>
-                    <Typography 
-                      color={task.completed ? 'success.main' : 'warning.main'}
-                      sx={{ fontWeight: 500 }}
-                    >
-                      {task.completed ? 'Concluída' : 'Pendente'}
+      <Grid container spacing={3}>
+        {tasks?.length > 0 ? (
+          tasks.map((task) => (
+            <Grid item xs={12} sm={6} md={4} key={task.id}>
+              <Paper elevation={3} sx={{ borderRadius: 2 }}>
+                <Card sx={{ 
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between'
+                }}>
+                  <CardContent>
+                    <Box display="flex" justifyContent="space-between" mb={2}>
+                      <Typography variant="h6" component="div">
+                        {task.title}
+                      </Typography>
+                      <Chip 
+                        label={task.completed ? 'Concluída' : 'Pendente'} 
+                        color={task.completed ? 'success' : 'warning'}
+                        size="small"
+                      />
+                    </Box>
+
+                    <Typography variant="body2" color="text.secondary" mb={2}>
+                      {task.description || 'Sem descrição'}
                     </Typography>
-                  </TableCell>
-                  <TableCell align="center">
+
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Typography variant="caption" color="text.secondary">
+                        Prazo:
+                      </Typography>
+                      <Typography variant="body2" fontWeight="500">
+                        {format(parseISO(task.due_date), 'dd/MM/yyyy HH:mm')}
+                      </Typography>
+                    </Box>
+                  </CardContent>
+
+                  <CardActions sx={{ justifyContent: 'flex-end', padding: 2 }}>
                     <Button 
+                      size="small" 
                       component={Link} 
-                      to={`/edit/${task.id}`} 
-                      variant="outlined" 
-                      color="primary"
-                      sx={{ mr: 1 }}
+                      to={`/edit/${task.id}`}
+                      variant="outlined"
                     >
                       Editar
                     </Button>
                     <Button 
-                      variant="outlined" 
+                      size="small" 
                       color="error"
+                      variant="outlined"
                       onClick={() => handleDelete(task.id)}
                     >
                       Excluir
                     </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={5} align="center">
-                  <Typography variant="body1" color="textSecondary">
-                    Nenhuma tarefa cadastrada
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                  </CardActions>
+                </Card>
+              </Paper>
+            </Grid>
+          ))
+        ) : (
+          <Grid item xs={12}>
+            <Box p={3} textAlign="center">
+              <Typography variant="body1" color="textSecondary">
+                Nenhuma tarefa cadastrada
+              </Typography>
+            </Box>
+          </Grid>
+        )}
+      </Grid>
     </div>
   );
 };
