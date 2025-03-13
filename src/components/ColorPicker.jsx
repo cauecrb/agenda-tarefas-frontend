@@ -1,8 +1,8 @@
 import React from 'react';
 import { CirclePicker } from 'react-color';
-import { Popover, Button } from '@mui/material';
+import { Popover, Button, IconButton } from '@mui/material';
 
-const ColorPicker = ({ color, onChange, compact }) => {
+const ColorPicker = ({ color, onChange, compact, icon }) => {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const presetColors = [
     '#e3f2fd', // Azul claro
@@ -16,18 +16,15 @@ const ColorPicker = ({ color, onChange, compact }) => {
 
   return (
     <div>
-      <Button
-        variant="contained"
+      <IconButton
         onClick={(e) => setAnchorEl(e.currentTarget)}
+        size="small"
         sx={{
-          width: compact ? 30 : 40,
-          height: compact ? 30 : 40,
-          minWidth: 0,
-          padding: 0,
-          backgroundColor: color,
-          '&:hover': { backgroundColor: color }
+          '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' }
         }}
-      />
+      >
+        {icon}
+      </IconButton>
       
       <Popover
         open={Boolean(anchorEl)}

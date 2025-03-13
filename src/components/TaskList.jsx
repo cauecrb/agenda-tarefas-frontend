@@ -11,7 +11,9 @@ import {
   Box,
   Paper,
   IconButton,
-  TextField
+  TextField,
+  InputAdornment,
+  Popover
 } from '@mui/material';
 import { 
   Star, 
@@ -19,13 +21,15 @@ import {
   Edit, 
   Delete, 
   Save, 
-  Cancel 
+  Cancel,
+  Search
 } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
+import FormatPaintIcon from '@mui/icons-material/FormatColorFill';
+import { SketchPicker } from 'react-color';
 import api from '../services/api';
 import ColorPicker from '../components/ColorPicker';
-import SearchIcon from '@mui/icons-material/Search';
-import { InputAdornment } from '@mui/material';
+import colorName from 'color-name';
 
 const TaskList = () => {
   const [tasks, setTasks] = useState([]);
@@ -34,6 +38,14 @@ const TaskList = () => {
   const [editingId, setEditingId] = useState(null);
   const [editedTask, setEditedTask] = useState({});
   const [searchColor, setSearchColor] = useState('');
+  const [colorPickerAnchor, setColorPickerAnchor] = useState(null);
+  const [selectedColor, setSelectedColor] = useState('');
+  const [colorName, getColorName] = useState('');
+
+  const uniqueColors = [...new Set(tasks
+    .map(task => task.color)
+    .filter(color => color && color !== '#e3f2fd')
+  )];
 
   // Ordenação: favoritas primeiro, depois por data
   const sortedTasks = [...tasks].sort((a, b) => {
@@ -41,10 +53,12 @@ const TaskList = () => {
     return new Date(a.due_date) - new Date(b.due_date);
   });
 
-  const filteredTasks = sortedTasks.filter(task => {
-    const taskColor = task.color?.toLowerCase() || '';
-    return taskColor.includes(searchColor.toLowerCase());
-  });
+  const filteredTasks = tasks
+  .sort((a, b) => b.is_favorite - a.is_favorite)
+  .filter(task => 
+    task.color?.toLowerCase().includes(searchColor.toLowerCase())
+  );
+
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -116,8 +130,6 @@ const TaskList = () => {
 
   const saveChanges = async () => {
     try {
-      console.error('aqui');
-
       const dueDate = new Date(editedTask.due_date);
     if (isNaN(dueDate)) {
       alert('Data inválida');
@@ -131,10 +143,8 @@ const TaskList = () => {
       is_favorite: editedTask.is_favorite,
       color: editedTask.color
     };
-      console.error('aqui2', editingId,'pay load ', payload);
 
       const response = await api.put(`/tasks/${editingId}`, payload);
-      console.error('ei:', editedTask);
 
       if (response.status === 200) {
         setTasks(prev => 
@@ -149,7 +159,7 @@ const TaskList = () => {
         request: error.config?.data,
         response: error.response?.data
       });
-      alert(`Erro ao salvar: ${error.response?.data?.message || 'Erro desconhecido'}`);
+      alert(`Erro ao salvar: ${error || 'Erro desconhecido'}`);
     }
   };
 
@@ -171,16 +181,78 @@ const TaskList = () => {
 
   return (
     <div style={{ padding: '60px' }}>
-      <Box display="flex" justifyContent="space-between" mb={3}>
-        <Typography variant="h6">Lista de Tarefas</Typography>
-        <Button 
-          variant="contained" 
-          color="primary"
-          sx={{ minWidth: '150px' }}
-          href="/new"
-        >
-          Nova Tarefa
-        </Button>
+      <Box display="flex" justifyContent="space-between" mb={3} gap={3}><br>
+      </br>
+          <Box sx={{flexGrow: 1, 
+          display: 'flex',
+          gap: 1,
+          width: '100%',
+          maxWidth: { md: 'calc(100% - 200px)' }
+         }}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="Filtrar por cor"
+              value={searchColor}
+              onChange={(e) => setSearchColor(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search color="action" />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                   <Button
+                    onClick={(e) => setColorPickerAnchor(e.currentTarget)}
+                    sx={{ minWidth: 40, height: 40 }}
+                  >
+                  {<FormatPaintIcon sx={{ color: '#616161' }} />}
+                  </Button>
+                  </InputAdornment>
+                )
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  height: 56
+                }
+              }}
+            />
+            
+            <Popover
+            open={Boolean(colorPickerAnchor)}
+            anchorEl={colorPickerAnchor}
+          >
+            <SketchPicker
+              presetColors={uniqueColors}
+              color={searchColor}
+              onChangeComplete={(color) => {
+                setSearchColor(color.hex);
+                setColorPickerAnchor(null);
+              }}
+            />
+          </Popover>
+
+            {selectedColor && (
+              <Typography variant="caption" sx={{ 
+                position: 'absolute',
+                bottom: -20,
+                left: 50,
+                color: 'text.secondary'
+              }}>
+                {getColorName(selectedColor)}
+              </Typography>
+            )}
+            
+          <Button 
+            variant="contained" 
+            color="primary"
+            href="/new"
+          >
+            Nova Tarefa
+          </Button>
+        </Box>
       </Box>
 
       <Grid container spacing={6}>
@@ -239,11 +311,11 @@ const TaskList = () => {
                     ) : (
                       <>
                         <Box display="flex" justifyContent="space-between" mb={2} sx={{
-                          borderBottom: '2px solid #e0e0e0', // Barra cinza
+                          borderBottom: '2px solid #e0e0e0', 
                           marginX: '-16px',
                           paddingX: '16px',
-                          paddingBottom: 2, // Espaçamento abaixo do título
-                          marginBottom: 2 // Espaço entre a barra e o conteúdo
+                          paddingBottom: 2, 
+                          marginBottom: 2
                         }}>
                           <Typography variant="h10" sx={{ fontWeight: 'bold' }}>
                             {task.title}
@@ -264,7 +336,6 @@ const TaskList = () => {
                           </IconButton>
                         </Box>
                         
-                        {/* Prazo na parte inferior */}
                         <Box sx={{ 
                           marginTop: 'auto',
                           paddingTop: 2,
@@ -326,6 +397,7 @@ const TaskList = () => {
                           }
                         }}
                         compact
+                        icon={<FormatPaintIcon sx={{ color: '#616161' }} />}
                       />
                     </Box>
                   </CardActions>
