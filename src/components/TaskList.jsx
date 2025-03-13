@@ -22,14 +22,58 @@ import {
   Delete, 
   Save, 
   Cancel,
-  Search
+  Search,
+  FormatPaint
 } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
-import FormatPaintIcon from '@mui/icons-material/FormatColorFill';
 import { SketchPicker } from 'react-color';
 import api from '../services/api';
-import ColorPicker from '../components/ColorPicker';
-import colorName from 'color-name';
+
+const ColorPicker = ({ color, onChange, icon }) => {
+  const [anchorEl, setAnchorEl] = useState(null);
+
+  return (
+    <div>
+      <IconButton
+        onClick={(e) => setAnchorEl(e.currentTarget)}
+        size="small"
+        sx={{
+          '&:hover': {
+            backgroundColor: '#00000010',
+            transform: 'rotate(-15deg)'
+          },
+          transition: 'all 0.2s ease'
+        }}
+      >
+        {React.cloneElement(icon, {
+          sx: {
+            fontSize: 28,
+            color: color === '#e3f2fd' ? '#616161' : color,
+            ...icon.props.sx
+          }
+        })}
+      </IconButton>
+
+      <Popover
+        open={Boolean(anchorEl)}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'center',
+        }}
+      >
+        <SketchPicker
+          color={color}
+          onChangeComplete={(color) => {
+            onChange(color.hex);
+            setAnchorEl(null);
+          }}
+        />
+      </Popover>
+    </div>
+  );
+};
 
 const TaskList = () => {
   const [tasks, setTasks] = useState([]);
@@ -38,53 +82,44 @@ const TaskList = () => {
   const [editingId, setEditingId] = useState(null);
   const [editedTask, setEditedTask] = useState({});
   const [searchColor, setSearchColor] = useState('');
-  const [colorPickerAnchor, setColorPickerAnchor] = useState(null);
-  const [selectedColor, setSelectedColor] = useState('');
-  const [colorName, getColorName] = useState('');
-
-  const uniqueColors = [...new Set(tasks
-    .map(task => task.color)
-    .filter(color => color && color !== '#e3f2fd')
-  )];
-
-  // Ordenação: favoritas primeiro, depois por data
-  const sortedTasks = [...tasks].sort((a, b) => {
-    if (b.is_favorite !== a.is_favorite) return b.is_favorite - a.is_favorite;
-    return new Date(a.due_date) - new Date(b.due_date);
+  const [newTask, setNewTask] = useState({
+    title: '',
+    description: '',
+    due_date: '',
+    color: '#e3f2fd'
   });
+  const [showCreateCard, setShowCreateCard] = useState(false);
 
-  const filteredTasks = tasks
-  .sort((a, b) => b.is_favorite - a.is_favorite)
-  .filter(task => 
-    task.color?.toLowerCase().includes(searchColor.toLowerCase())
-  );
-
-
+  // Fetch tasks on mount
   useEffect(() => {
     const fetchTasks = async () => {
       try {
         const response = await api.get('/tasks');
         setTasks(response.data.data || []);
       } catch (err) {
-        setError('Erro ao carregar tarefas. Tente novamente mais tarde.');
-        console.error('API Error:', err);
+        setError('Erro ao carregar tarefas');
+        console.error('Error:', err);
       } finally {
         setLoading(false);
       }
     };
-
     fetchTasks();
   }, []);
 
+  // Sorting and filtering
+  const sortedTasks = [...tasks].sort((a, b) => b.is_favorite - a.is_favorite);
+  const filteredTasks = sortedTasks.filter(task => 
+    task.color?.toLowerCase().includes(searchColor.toLowerCase())
+  );
+
+  // Task operations
   const toggleFavorite = async (task) => {
     try {
       const updatedTask = await api.put(`/tasks/${task.id}`, {
         ...task,
         is_favorite: !task.is_favorite
       });
-      setTasks(prev => prev.map(t => 
-        t.id === task.id ? updatedTask.data.data : t
-      ));
+      setTasks(prev => prev.map(t => t.id === task.id ? updatedTask.data.data : t));
     } catch (error) {
       console.error('Erro ao atualizar favorito:', error);
     }
@@ -100,26 +135,11 @@ const TaskList = () => {
     }
   };
 
-  const updateTaskColor = async (taskId, newColor) => {
-    try {
-      await api.patch(`/tasks/${taskId}`, { color: newColor });
-      setTasks(prev => prev.map(t => 
-        t.id === taskId ? { ...t, color: newColor } : t
-      ));
-    } catch (error) {
-      console.error('Erro ao atualizar cor:', error);
-    }
-  };
-
   const startEditing = (task) => {
     setEditingId(task.id);
     setEditedTask({
-      title: task.title,
-      description: task.description,
-      completed: task.completed,
-      is_favorite: task.is_favorite,
-      color: task.color || '#e3f2fd',
-      date: task.due_date
+      ...task,
+      due_date: format(parseISO(task.due_date), "yyyy-MM-dd'T'HH:mm")
     });
   };
 
@@ -130,36 +150,39 @@ const TaskList = () => {
 
   const saveChanges = async () => {
     try {
-      const dueDate = new Date(editedTask.due_date);
-    if (isNaN(dueDate)) {
-      alert('Data inválida');
-      return;
-    }
-    const payload = {
-      title: editedTask.title,
-      description: editedTask.description,
-      due_date: editedTask.date,
-      completed: editedTask.completed,
-      is_favorite: editedTask.is_favorite,
-      color: editedTask.color
-    };
+      const payload = {
+        ...editedTask,
+        due_date: new Date(editedTask.due_date).toISOString()
+      };
 
-      const response = await api.put(`/tasks/${editingId}`, payload);
-
-      if (response.status === 200) {
-        setTasks(prev => 
-          prev.map(task => 
-            task.id === editingId ? response.data.data : task
-          )
-        );
-        cancelEditing();
-      }
+      const updatedTask = await api.put(`/tasks/${editingId}`, payload);
+      setTasks(prev => prev.map(task => 
+        task.id === editingId ? updatedTask.data.data : task
+      ));
+      cancelEditing();
     } catch (error) {
-      console.error('Erro detalhado:', {
-        request: error.config?.data,
-        response: error.response?.data
+      console.error('Erro ao atualizar tarefa:', error);
+      alert('Erro ao salvar alterações');
+    }
+  };
+
+  const handleCreateTask = async () => {
+    try {
+      const response = await api.post('/tasks', {
+        ...newTask,
+        due_date: new Date(newTask.due_date).toISOString()
       });
-      alert(`Erro ao salvar: ${error || 'Erro desconhecido'}`);
+      
+      setTasks([response.data.data, ...tasks]);
+      setShowCreateCard(false);
+      setNewTask({
+        title: '',
+        description: '',
+        due_date: '',
+        color: '#e3f2fd'
+      });
+    } catch (error) {
+      console.error('Erro ao criar tarefa:', error);
     }
   };
 
@@ -180,144 +203,191 @@ const TaskList = () => {
   }
 
   return (
-    <div style={{ padding: '60px' }}>
-      <Box display="flex" justifyContent="space-between" mb={3} gap={3}><br>
-      </br>
-          <Box sx={{flexGrow: 1, 
-          display: 'flex',
-          gap: 1,
-          width: '100%',
-          maxWidth: { md: 'calc(100% - 200px)' }
-         }}>
-            <TextField
-              fullWidth
-              variant="outlined"
-              placeholder="Filtrar por cor"
-              value={searchColor}
-              onChange={(e) => setSearchColor(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search color="action" />
-                  </InputAdornment>
-                ),
-                endAdornment: (
-                  <InputAdornment position="end">
-                   <Button
-                    onClick={(e) => setColorPickerAnchor(e.currentTarget)}
-                    sx={{ minWidth: 40, height: 40 }}
-                  >
-                  {<FormatPaintIcon sx={{ color: '#616161' }} />}
-                  </Button>
-                  </InputAdornment>
-                )
-              }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                  height: 56
-                }
-              }}
-            />
-            
-            <Popover
-            open={Boolean(colorPickerAnchor)}
-            anchorEl={colorPickerAnchor}
-          >
-            <SketchPicker
-              presetColors={uniqueColors}
-              color={searchColor}
-              onChangeComplete={(color) => {
-                setSearchColor(color.hex);
-                setColorPickerAnchor(null);
-              }}
-            />
-          </Popover>
-
-            {selectedColor && (
-              <Typography variant="caption" sx={{ 
-                position: 'absolute',
-                bottom: -20,
-                left: 50,
-                color: 'text.secondary'
-              }}>
-                {getColorName(selectedColor)}
-              </Typography>
-            )}
-            
-          <Button 
-            variant="contained" 
-            color="primary"
-            href="/new"
-          >
-            Nova Tarefa
-          </Button>
-        </Box>
+    <div style={{ padding: '40px' }}>
+      {/* Header Section */}
+      <Box sx={{ 
+        mb: 4,
+        display: 'flex',
+        gap: 2,
+        flexDirection: { xs: 'column', md: 'row' }
+      }}>
+        <TextField
+          fullWidth
+          variant="outlined"
+          placeholder="Filtrar por cor (ex: #e3f2fd)"
+          value={searchColor}
+          onChange={(e) => setSearchColor(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search />
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 2,
+              height: 56
+            }
+          }}
+        />
       </Box>
 
-      <Grid container spacing={6}>
-        {filteredTasks?.length > 0 ? (
-          filteredTasks.map((task) => (
-            <Grid item xs={12} md={4} key={task.id} sx={{padding: '24px'}}>
-              <Paper elevation={3} sx={{ 
-                borderRadius: 6,
-                transition: 'transform 0.2s',
-                '&:hover': { transform: 'scale(1.02)' },
-                margin: '16px'
-              }}>
-               <Card sx={{ 
-                  height: '100%',
-                  minHeight: { xs: 300, md: 400 },
+      {/* Main Content */}
+      <Grid container spacing={4}>
+        {/* Create Task Card */}
+        {showCreateCard ? (
+          <Grid item xs={12} md={4}>
+            <Paper elevation={3} sx={{ 
+              borderRadius: 3,
+              border: '2px dashed #e0e0e0',
+              backgroundColor: newTask.color,
+              minHeight: 300
+            }}>
+              <CardContent>
+                <Box sx={{ 
                   display: 'flex',
                   flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  backgroundColor: editingId === task.id ? editedTask.color : task.color,
-                  borderRadius: 2,
-                  border: `2px solid ${task.color ? `${task.color}80` : '#64b5f6'}`,
-                  transition: 'all 0.3s ease'
+                  gap: 2,
+                  height: '100%'
                 }}>
-                  <CardContent>
-                    {editingId === task.id ? (
-                      <>
-                        <TextField
-                          fullWidth
-                          value={editedTask.title}
-                          onChange={(e) => setEditedTask({...editedTask, title: e.target.value})}
-                          margin="normal"
-                          label="Título"
-                          required
-                        />
-                        
-                        <TextField
-                          fullWidth
-                          multiline
-                          rows={3}
-                          value={editedTask.description}
-                          onChange={(e) => setEditedTask({...editedTask, description: e.target.value})}
-                          margin="normal"
-                          label="Descrição"
-                        />
-                        
-                        <TextField
-                          fullWidth
-                          type="datetime-local"
-                          value={editedTask.due_date}
-                          onChange={(e) => setEditedTask({...editedTask, due_date: e.target.value})}
-                          margin="normal"
-                          InputLabelProps={{ shrink: true }}
-                          required
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <Box display="flex" justifyContent="space-between" mb={2} sx={{
-                          borderBottom: '2px solid #e0e0e0', 
-                          marginX: '-16px',
-                          paddingX: '16px',
-                          paddingBottom: 2, 
-                          marginBottom: 2
-                        }}>
-                          <Typography variant="h10" sx={{ fontWeight: 'bold' }}>
+                  <TextField
+                    fullWidth
+                    label="Título"
+                    value={newTask.title}
+                    onChange={(e) => setNewTask({...newTask, title: e.target.value})}
+                    required
+                  />
+                  
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={3}
+                    label="Descrição"
+                    value={newTask.description}
+                    onChange={(e) => setNewTask({...newTask, description: e.target.value})}
+                  />
+                  
+                  <TextField
+                    fullWidth
+                    type="datetime-local"
+                    label="Prazo"
+                    InputLabelProps={{ shrink: true }}
+                    value={newTask.due_date}
+                    onChange={(e) => setNewTask({...newTask, due_date: e.target.value})}
+                    required
+                  />
+                  
+                  <Box sx={{ 
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    mt: 'auto'
+                  }}>
+                    <ColorPicker
+                      color={newTask.color}
+                      onChange={(newColor) => setNewTask({...newTask, color: newColor})}
+                      icon={<FormatPaint />}
+                    />
+                    
+                    <Box>
+                      <Button 
+                        onClick={() => setShowCreateCard(false)}
+                        sx={{ mr: 1 }}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button 
+                        variant="contained" 
+                        onClick={handleCreateTask}
+                        disabled={!newTask.title || !newTask.due_date}
+                      >
+                        Criar
+                      </Button>
+                    </Box>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Paper>
+          </Grid>
+        ) : (
+          <Grid item xs={12} md={4}>
+            <Paper elevation={0} sx={{ 
+              height: 300,
+              border: '2px dashed #e0e0e0',
+              borderRadius: 3,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              '&:hover': { borderColor: '#64b5f6' }
+            }} onClick={() => setShowCreateCard(true)}>
+              <Typography variant="h6" color="textSecondary">
+                + Nova Tarefa
+              </Typography>
+            </Paper>
+          </Grid>
+        )}
+
+        {/* Tasks List */}
+        {filteredTasks.map((task) => (
+          <Grid item xs={12} md={4} key={task.id}>
+            <Paper elevation={3} sx={{ 
+              borderRadius: 3,
+              transition: 'transform 0.2s',
+              '&:hover': { transform: 'scale(1.02)' }
+            }}>
+              <Card sx={{ 
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                backgroundColor: editingId === task.id ? editedTask.color : task.color,
+                borderRadius: 2,
+                border: `2px solid ${task.color ? `${task.color}80` : '#64b5f6'}`
+              }}>
+                <CardContent>
+                  {editingId === task.id ? (
+                    <>
+                      <TextField
+                        fullWidth
+                        value={editedTask.title}
+                        onChange={(e) => setEditedTask({...editedTask, title: e.target.value})}
+                        margin="normal"
+                        label="Título"
+                        required
+                      />
+                      
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={3}
+                        value={editedTask.description}
+                        onChange={(e) => setEditedTask({...editedTask, description: e.target.value})}
+                        margin="normal"
+                        label="Descrição"
+                      />
+                      
+                      <TextField
+                        fullWidth
+                        type="datetime-local"
+                        value={editedTask.due_date}
+                        onChange={(e) => setEditedTask({...editedTask, due_date: e.target.value})}
+                        margin="normal"
+                        InputLabelProps={{ shrink: true }}
+                        required
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Box sx={{ 
+                        borderBottom: '2px solid #e0e0e0',
+                        marginX: -3,
+                        paddingX: 3,
+                        paddingBottom: 2,
+                        marginBottom: 2
+                      }}>
+                        <Box display="flex" justifyContent="space-between">
+                          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                             {task.title}
                           </Typography>
                           <Chip 
@@ -328,92 +398,94 @@ const TaskList = () => {
                               fontWeight: 'bold'
                             }}
                           />
-                          <IconButton 
-                            onClick={() => toggleFavorite(task)}
-                            sx={{ color: task.is_favorite ? '#ffd700' : 'inherit' }}
-                          >
-                            {task.is_favorite ? <Star /> : <StarBorder />}
-                          </IconButton>
                         </Box>
-                        
-                        <Box sx={{ 
-                          marginTop: 'auto',
-                          paddingTop: 2,
-                        }}>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            minHeight: '160px',
-                            mb: 2,
-                            whiteSpace: 'pre-wrap'
-                          }}
-                        >
-                          {task.description || 'Sem descrição'}
-                        </Typography>
-                        
+                      </Box>
+                      
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          minHeight: 80,
+                          mb: 3,
+                          whiteSpace: 'pre-wrap'
+                        }}
+                      >
+                        {task.description || 'Sem descrição'}
+                      </Typography>
+                      
+                      <Box sx={{ 
+                        marginTop: 'auto',
+                        paddingTop: 2,
+                        borderTop: '1px dashed rgba(0, 0, 0, 0.12)'
+                      }}>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          <strong> 🕒 Prazo:</strong> {format(parseISO(task.due_date), 'dd/MM/yyyy HH:mm')}
+                          🕒 {format(parseISO(task.due_date), 'dd/MM/yyyy HH:mm')}
                         </Typography>
                       </Box>
+                    </>
+                  )}
+                </CardContent>
+
+                <CardActions sx={{ 
+                  justifyContent: 'space-between',
+                  p: 2,
+                  borderTop: `1px solid ${task.color ? `${task.color}50` : '#64b5f650'}`
+                }}>
+                  <Box display="flex" gap={1}>
+                    {editingId === task.id ? (
+                      <>
+                        <IconButton onClick={saveChanges} color="primary">
+                          <Save />
+                        </IconButton>
+                        <IconButton onClick={cancelEditing} color="error">
+                          <Cancel />
+                        </IconButton>
+                      </>
+                    ) : (
+                      <>
+                        <IconButton onClick={() => startEditing(task)} color="primary">
+                          <Edit />
+                        </IconButton>
+                        <IconButton onClick={() => handleDelete(task.id)} color="error">
+                          <Delete />
+                        </IconButton>
                       </>
                     )}
-                  </CardContent>
+                  </Box>
 
-                  <CardActions sx={{ 
-                    justifyContent: 'space-between',
-                    p: 2,
-                    borderTop: `1px solid ${task.color ? `${task.color}50` : '#64b5f650'}`
-                  }}>
-                    <Box display="flex" gap={1}>
-                      {editingId === task.id ? (
-                        <>
-                          <IconButton onClick={saveChanges} color="primary">
-                            <Save />
-                          </IconButton>
-                          <IconButton onClick={cancelEditing} color="error">
-                            <Cancel />
-                          </IconButton>
-                        </>
-                      ) : (
-                        <>
-                          <IconButton onClick={() => startEditing(task)} color="primary">
-                            <Edit />
-                          </IconButton>
-                          <IconButton onClick={() => handleDelete(task.id)} color="error">
-                            <Delete />
-                          </IconButton>
-                        </>
-                      )}
-                    </Box>
-
-                    <Box display="flex" gap={1} alignItems="center">
-                      <ColorPicker
-                        color={editingId === task.id ? editedTask.color : task.color}
-                        onChange={(newColor) => {
-                          if (editingId === task.id) {
-                            setEditedTask({...editedTask, color: newColor});
-                          } else {
-                            updateTaskColor(task.id, newColor);
-                          }
-                        }}
-                        compact
-                        icon={<FormatPaintIcon sx={{ color: '#616161' }} />}
-                      />
-                    </Box>
-                  </CardActions>
-                </Card>
-              </Paper>
-            </Grid>
-          ))
-        ) : (
-          <Grid item xs={12}>
-            <Box p={3} textAlign="center">
-              <Typography variant="body1" color="textSecondary">
-                Nenhuma tarefa cadastrada
-              </Typography>
-            </Box>
+                  <Box display="flex" gap={1} alignItems="center">
+                    <ColorPicker
+                      color={editingId === task.id ? editedTask.color : task.color}
+                      onChange={(newColor) => {
+                        if (editingId === task.id) {
+                          setEditedTask({...editedTask, color: newColor});
+                        } else {
+                          const updateTaskColor = async () => {
+                            try {
+                              await api.patch(`/tasks/${task.id}`, { color: newColor });
+                              setTasks(prev => prev.map(t => 
+                                t.id === task.id ? { ...t, color: newColor } : t
+                              ));
+                            } catch (error) {
+                              console.error('Erro ao atualizar cor:', error);
+                            }
+                          };
+                          updateTaskColor();
+                        }
+                      }}
+                      icon={<FormatPaint />}
+                    />
+                    <IconButton 
+                      onClick={() => toggleFavorite(task)}
+                      sx={{ color: task.is_favorite ? '#ffd700' : 'inherit' }}
+                    >
+                      {task.is_favorite ? <Star /> : <StarBorder />}
+                    </IconButton>
+                  </Box>
+                </CardActions>
+              </Card>
+            </Paper>
           </Grid>
-        )}
+        ))}
       </Grid>
     </div>
   );
