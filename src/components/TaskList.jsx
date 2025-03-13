@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { 
   Grid,
   Card,
@@ -11,16 +10,41 @@ import {
   CircularProgress,
   Box,
   Paper,
-  IconButton
+  IconButton,
+  TextField
 } from '@mui/material';
-import { Star, StarBorder, Edit, Delete } from '@mui/icons-material';
+import { 
+  Star, 
+  StarBorder, 
+  Edit, 
+  Delete, 
+  Save, 
+  Cancel 
+} from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import api from '../services/api';
+import ColorPicker from '../components/ColorPicker';
+import SearchIcon from '@mui/icons-material/Search';
+import { InputAdornment } from '@mui/material';
 
 const TaskList = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editedTask, setEditedTask] = useState({});
+  const [searchColor, setSearchColor] = useState('');
+
+  // Ordenação: favoritas primeiro, depois por data
+  const sortedTasks = [...tasks].sort((a, b) => {
+    if (b.is_favorite !== a.is_favorite) return b.is_favorite - a.is_favorite;
+    return new Date(a.due_date) - new Date(b.due_date);
+  });
+
+  const filteredTasks = sortedTasks.filter(task => {
+    const taskColor = task.color?.toLowerCase() || '';
+    return taskColor.includes(searchColor.toLowerCase());
+  });
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -62,6 +86,73 @@ const TaskList = () => {
     }
   };
 
+  const updateTaskColor = async (taskId, newColor) => {
+    try {
+      await api.patch(`/tasks/${taskId}`, { color: newColor });
+      setTasks(prev => prev.map(t => 
+        t.id === taskId ? { ...t, color: newColor } : t
+      ));
+    } catch (error) {
+      console.error('Erro ao atualizar cor:', error);
+    }
+  };
+
+  const startEditing = (task) => {
+    setEditingId(task.id);
+    setEditedTask({
+      title: task.title,
+      description: task.description,
+      completed: task.completed,
+      is_favorite: task.is_favorite,
+      color: task.color || '#e3f2fd',
+      date: task.due_date
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditedTask({});
+  };
+
+  const saveChanges = async () => {
+    try {
+      console.error('aqui');
+
+      const dueDate = new Date(editedTask.due_date);
+    if (isNaN(dueDate)) {
+      alert('Data inválida');
+      return;
+    }
+    const payload = {
+      title: editedTask.title,
+      description: editedTask.description,
+      due_date: editedTask.date,
+      completed: editedTask.completed,
+      is_favorite: editedTask.is_favorite,
+      color: editedTask.color
+    };
+      console.error('aqui2', editingId,'pay load ', payload);
+
+      const response = await api.put(`/tasks/${editingId}`, payload);
+      console.error('ei:', editedTask);
+
+      if (response.status === 200) {
+        setTasks(prev => 
+          prev.map(task => 
+            task.id === editingId ? response.data.data : task
+          )
+        );
+        cancelEditing();
+      }
+    } catch (error) {
+      console.error('Erro detalhado:', {
+        request: error.config?.data,
+        response: error.response?.data
+      });
+      alert(`Erro ao salvar: ${error.response?.data?.message || 'Erro desconhecido'}`);
+    }
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" mt={4}>
@@ -79,132 +170,164 @@ const TaskList = () => {
   }
 
   return (
-    <div style={{ padding: '20px' }}>
+    <div style={{ padding: '60px' }}>
       <Box display="flex" justifyContent="space-between" mb={3}>
-        <Typography variant="h4">Lista de Tarefas</Typography>
+        <Typography variant="h6">Lista de Tarefas</Typography>
         <Button 
-          component={Link} 
-          to="/new" 
           variant="contained" 
           color="primary"
           sx={{ minWidth: '150px' }}
+          href="/new"
         >
           Nova Tarefa
         </Button>
       </Box>
 
-      <Grid container spacing={3}>
-        {tasks?.length > 0 ? (
-          tasks.map((task) => (
-            <Grid item xs={12} sm={6} md={4} key={task.id}>
+      <Grid container spacing={6}>
+        {filteredTasks?.length > 0 ? (
+          filteredTasks.map((task) => (
+            <Grid item xs={12} md={4} key={task.id} sx={{padding: '24px'}}>
               <Paper elevation={3} sx={{ 
-                borderRadius: 2,
+                borderRadius: 6,
                 transition: 'transform 0.2s',
-                '&:hover': { transform: 'scale(1.02)' }
+                '&:hover': { transform: 'scale(1.02)' },
+                margin: '16px'
               }}>
-                <Card sx={{ 
+               <Card sx={{ 
                   height: '100%',
+                  minHeight: { xs: 300, md: 400 },
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
-                  backgroundColor: task.color || '#e3f2fd',
-                  position: 'relative',
-                  border: `2px solid ${task.color ? `${task.color}80` : '#64b5f6'}`
+                  backgroundColor: editingId === task.id ? editedTask.color : task.color,
+                  borderRadius: 2,
+                  border: `2px solid ${task.color ? `${task.color}80` : '#64b5f6'}`,
+                  transition: 'all 0.3s ease'
                 }}>
-                  <Box sx={{ 
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    zIndex: 1
-                  }}>
-                    <IconButton onClick={() => toggleFavorite(task)}>
-                      {task.is_favorite ? (
-                        <Star sx={{ color: '#ffd700' }} />
-                      ) : (
-                        <StarBorder sx={{ color: '#616161' }} />
-                      )}
-                    </IconButton>
-                  </Box>
-
                   <CardContent>
-                    <Box mb={2}>
-                      <Typography variant="h6" sx={{ 
-                        fontWeight: 'bold',
-                        color: '#212121',
-                        minHeight: '64px'
-                      }}>
-                        {task.title}
-                      </Typography>
-                    </Box>
-
-                    <Typography 
-                      variant="body2" 
-                      sx={{ 
-                        color: '#424242',
-                        minHeight: '80px',
-                        mb: 2
-                      }}
-                    >
-                      {task.description || 'Sem descrição'}
-                    </Typography>
-
-                    <Box display="flex" justifyContent="space-between" alignItems="center">
-                      <Box>
-                        <Typography variant="caption" sx={{ color: '#616161' }}>
-                          Prazo:
-                        </Typography>
+                    {editingId === task.id ? (
+                      <>
+                        <TextField
+                          fullWidth
+                          value={editedTask.title}
+                          onChange={(e) => setEditedTask({...editedTask, title: e.target.value})}
+                          margin="normal"
+                          label="Título"
+                          required
+                        />
+                        
+                        <TextField
+                          fullWidth
+                          multiline
+                          rows={3}
+                          value={editedTask.description}
+                          onChange={(e) => setEditedTask({...editedTask, description: e.target.value})}
+                          margin="normal"
+                          label="Descrição"
+                        />
+                        
+                        <TextField
+                          fullWidth
+                          type="datetime-local"
+                          value={editedTask.due_date}
+                          onChange={(e) => setEditedTask({...editedTask, due_date: e.target.value})}
+                          margin="normal"
+                          InputLabelProps={{ shrink: true }}
+                          required
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <Box display="flex" justifyContent="space-between" mb={2} sx={{
+                          borderBottom: '2px solid #e0e0e0', // Barra cinza
+                          marginX: '-16px',
+                          paddingX: '16px',
+                          paddingBottom: 2, // Espaçamento abaixo do título
+                          marginBottom: 2 // Espaço entre a barra e o conteúdo
+                        }}>
+                          <Typography variant="h10" sx={{ fontWeight: 'bold' }}>
+                            {task.title}
+                          </Typography>
+                          <Chip 
+                            label={task.completed ? 'Concluída' : 'Pendente'} 
+                            sx={{ 
+                              backgroundColor: task.completed ? '#81c784' : '#ffb74d',
+                              color: 'white',
+                              fontWeight: 'bold'
+                            }}
+                          />
+                          <IconButton 
+                            onClick={() => toggleFavorite(task)}
+                            sx={{ color: task.is_favorite ? '#ffd700' : 'inherit' }}
+                          >
+                            {task.is_favorite ? <Star /> : <StarBorder />}
+                          </IconButton>
+                        </Box>
+                        
+                        {/* Prazo na parte inferior */}
+                        <Box sx={{ 
+                          marginTop: 'auto',
+                          paddingTop: 2,
+                        }}>
                         <Typography 
                           variant="body2" 
                           sx={{ 
-                            fontWeight: 500,
-                            color: '#212121'
+                            minHeight: '160px',
+                            mb: 2,
+                            whiteSpace: 'pre-wrap'
                           }}
                         >
-                          {format(parseISO(task.due_date), 'dd/MM/yyyy HH:mm')}
+                          {task.description || 'Sem descrição'}
+                        </Typography>
+                        
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          <strong> 🕒 Prazo:</strong> {format(parseISO(task.due_date), 'dd/MM/yyyy HH:mm')}
                         </Typography>
                       </Box>
-                      
-                      <Chip 
-                        label={task.completed ? 'Concluída' : 'Pendente'} 
-                        size="small"
-                        sx={{ 
-                          backgroundColor: task.completed ? '#81c784' : '#ffb74d',
-                          color: 'white',
-                          fontWeight: 'bold'
-                        }}
-                      />
-                    </Box>
+                      </>
+                    )}
                   </CardContent>
 
                   <CardActions sx={{ 
-                    justifyContent: 'flex-end',
-                    padding: 2,
+                    justifyContent: 'space-between',
+                    p: 2,
                     borderTop: `1px solid ${task.color ? `${task.color}50` : '#64b5f650'}`
                   }}>
-                    <Button
-                      startIcon={<Edit />}
-                      component={Link}
-                      to={`/edit/${task.id}`}
-                      variant="outlined"
-                      sx={{ 
-                        color: '#616161',
-                        borderColor: '#e0e0e0',
-                        '&:hover': {
-                          borderColor: '#bdbdbd'
-                        }
-                      }}
-                    >
-                      Editar
-                    </Button>
-                    <Button
-                      startIcon={<Delete />}
-                      variant="outlined"
-                      color="error"
-                      onClick={() => handleDelete(task.id)}
-                      sx={{ ml: 1 }}
-                    >
-                      Excluir
-                    </Button>
+                    <Box display="flex" gap={1}>
+                      {editingId === task.id ? (
+                        <>
+                          <IconButton onClick={saveChanges} color="primary">
+                            <Save />
+                          </IconButton>
+                          <IconButton onClick={cancelEditing} color="error">
+                            <Cancel />
+                          </IconButton>
+                        </>
+                      ) : (
+                        <>
+                          <IconButton onClick={() => startEditing(task)} color="primary">
+                            <Edit />
+                          </IconButton>
+                          <IconButton onClick={() => handleDelete(task.id)} color="error">
+                            <Delete />
+                          </IconButton>
+                        </>
+                      )}
+                    </Box>
+
+                    <Box display="flex" gap={1} alignItems="center">
+                      <ColorPicker
+                        color={editingId === task.id ? editedTask.color : task.color}
+                        onChange={(newColor) => {
+                          if (editingId === task.id) {
+                            setEditedTask({...editedTask, color: newColor});
+                          } else {
+                            updateTaskColor(task.id, newColor);
+                          }
+                        }}
+                        compact
+                      />
+                    </Box>
                   </CardActions>
                 </Card>
               </Paper>
